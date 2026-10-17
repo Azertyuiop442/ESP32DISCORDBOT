@@ -1,0 +1,28 @@
+# ESP-IDF build artifacts
+build/
+managed_components/
+dependencies.lock
+sdkconfig
+sdkconfig.old
+*.bin
+
+# Environment & secrets
+.env
+*.env
+!/.env.example
+
+# Flash encryption & cryptographic signing keys
+*.pem
+*.key
+*.der
+
+# Editor & compiler caches
+.vscode/
+.idea/
+*.o
+*.d
+__pycache__/
+*.pyc
+
+# Internal documentation
+docs/*.md

@@ -1,0 +1,8 @@
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x6000
+otadata,  data, ota,     0xf000,   0x2000
+phy_init, data, phy,     0x11000,  0x1000
+factory,  app,  factory, 0x20000,  0x1E0000
+# nvs is 24 KB. ESP-IDF costs roughly 22 KB of DRAM per MB of NVS
+# partition, so a 24 KB partition does not carry that per-MB figure;
+# six keys stay far under the 5.5 KB per thousand threshold.

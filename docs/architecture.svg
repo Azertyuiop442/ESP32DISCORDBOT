@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 728 356" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="data-flow-dark-title data-flow-dark-desc" id="diagram_architecture-root">
+      <title id="data-flow-dark-title">ESP32 Discord Bot Data Flow Pipeline</title>
+      <desc id="data-flow-dark-desc">5-step architecture pipeline showing WSS ETF Gateway ingestion, C99 zero-copy decoding, dc_intq lock-free ring buffer, command worker router, and REST dispatch.</desc>
+      <defs>
+      <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;family=Noto+Serif:ital@0;1&amp;family=Noto+Sans+KR:wght@400;500;600&amp;family=Noto+Serif+KR:wght@400&amp;family=Noto+Sans+TC:wght@400;500;600&amp;family=Noto+Serif+TC:wght@400&amp;display=swap');
+      #diagram_architecture-root { --paper: #0d1117; --paper-2: #161b22; --ink: #f0f6fc; --muted: #8b949e;
+      --soft: #6e7681; --rule: #30363d; --accent: #f08a59;
+      --accent-tint: rgba(240,138,89,0.12); --link: #58a6ff;
+      --sans: 'Geist', system-ui, sans-serif; --serif: 'Instrument Serif', serif;
+      --mono: 'Geist Mono', ui-monospace, monospace; }
+      #diagram_architecture-root { color: var(--ink); font-family: var(--sans); }
+      #diagram_architecture-root .step-number, #diagram_architecture-root .step-label, #diagram_architecture-root .lane-label, #diagram_architecture-root .role-text, #diagram_architecture-root .chip-text, #diagram_architecture-root .edge-text, #diagram_architecture-root .legend-label, #diagram_architecture-root .legend-text { font-family: var(--mono);
+      text-anchor: middle;
+      dominant-baseline: central; }
+      #diagram_architecture-root .step-number { fill: var(--ink); font-size: 7.5px; font-weight: 700; }
+      #diagram_architecture-root .step-label { fill: var(--muted); font-size: 7px; font-weight: 600; letter-spacing: 0.12em; }
+      #diagram_architecture-root .lane-label { fill: var(--muted); font-size: 7.5px; font-weight: 600; letter-spacing: 0.14em; }
+      #diagram_architecture-root .role-text { fill: var(--ink); font-size: 6px; font-weight: 700; }
+      #diagram_architecture-root .node-title { fill: var(--ink); font: 600 9.5px var(--sans); text-anchor: middle; dominant-baseline: central; }
+      #diagram_architecture-root .node-sub { fill: var(--muted); font: 400 7px var(--mono); text-anchor: middle; dominant-baseline: central; }
+      #diagram_architecture-root .node-tool { fill: var(--soft); font: 400 6.5px var(--mono); text-anchor: middle; dominant-baseline: central; }
+      #diagram_architecture-root .chip-text { fill: #ffffff; font-size: 5.5px; font-weight: 700; }
+      #diagram_architecture-root .edge-text { font-size: 7px; font-weight: 600; letter-spacing: 0.08em; }
+      #diagram_architecture-root .focal-text { fill: var(--accent); }
+      #diagram_architecture-root .legend-label { fill: var(--muted); font-size: 7px; font-weight: 600; letter-spacing: 0.12em; text-anchor: end; }
+      #diagram_architecture-root .legend-text { fill: var(--muted); font: 400 7px var(--sans); text-anchor: start; }</style>
+        <pattern id="diagram_architecture-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="11" cy="11" r="0.8" fill="#f0f6fc" fill-opacity="0.07"/></pattern>
+        <marker id="diagram_architecture-arr-muted" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#8b949e"/></marker>
+        <marker id="diagram_architecture-arr-accent" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#f08a59"/></marker>
+        <marker id="diagram_architecture-arr-link" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#58a6ff"/></marker>
+      </defs>
+      <!-- Background: GitHub Dark Canvas #0d1117 -->
+      <rect width="728" height="356" fill="#0d1117"/>
+      <rect width="728" height="356" fill="url(#diagram_architecture-dots)"/>
+      <rect x="0" y="36" width="728" height="80" fill="#f0f6fc" fill-opacity="0.015"/>
+      <rect x="0" y="196" width="728" height="80" fill="#f0f6fc" fill-opacity="0.015"/>
+
+      <!-- Header and lane structure -->
+      <line x1="0" y1="36" x2="728" y2="36" stroke="#30363d" stroke-width="0.8"/>
+      <line x1="0" y1="116" x2="728" y2="116" stroke="#30363d" stroke-width="0.8"/>
+      <line x1="0" y1="196" x2="728" y2="196" stroke="#30363d" stroke-width="0.8"/>
+      <line x1="0" y1="276" x2="728" y2="276" stroke="#30363d" stroke-width="0.8"/>
+      <line x1="140" y1="36" x2="140" y2="276" stroke="#30363d" stroke-width="0.8"/>
+
+      <g aria-label="Pipeline steps">
+        <rect x="180" y="6" width="32" height="15" rx="7.5" fill="#f0f6fc" fill-opacity="0.08"/><text x="196" y="13.5" class="step-number">01</text><text x="196" y="27" class="step-label">CAPTURE</text>
+        <rect x="292" y="6" width="32" height="15" rx="7.5" fill="#f0f6fc" fill-opacity="0.08"/><text x="308" y="13.5" class="step-number">02</text><text x="308" y="27" class="step-label">DECODE</text>
+        <rect x="404" y="6" width="32" height="15" rx="7.5" fill="#f0f6fc" fill-opacity="0.08"/><text x="420" y="13.5" class="step-number">03</text><text x="420" y="27" class="step-label">BUFFER</text>
+        <rect x="516" y="6" width="32" height="15" rx="7.5" fill="#f08a59" stroke="#f08a59" stroke-width="0.8" fill-opacity="0.20"/><text x="532" y="13.5" class="step-number focal-text">04</text><text x="532" y="27" class="step-label focal-text">EXECUTE</text>
+        <rect x="628" y="6" width="32" height="15" rx="7.5" fill="#f0f6fc" fill-opacity="0.08"/><text x="644" y="13.5" class="step-number">05</text><text x="644" y="27" class="step-label">DISPATCH</text>
+      </g>
+
+      <g aria-label="Role lanes">
+        <text x="70" y="70" class="lane-label">DISCORD</text><text x="70" y="82" class="lane-label">SERVICES</text>
+        <text x="70" y="150" class="lane-label">FIRMWARE</text><text x="70" y="162" class="lane-label">ESP-IDF (C99)</text>
+        <text x="70" y="230" class="lane-label">HARDWARE</text><text x="70" y="242" class="lane-label">ESP32 SOC</text>
+      </g>
+
+      <!-- Connectors first. Cross-lane paths use r=8 orthogonal elbows. -->
+      <!-- 01 Gateway -> 02 ETF Decoder (Lane 1 -> Lane 2) -->
+      <path d="M246 76 H300 Q308 76 308 84 V124" fill="none" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-link)"/>
+      <rect x="256" y="69" width="46" height="14" rx="3" fill="#0d1117" stroke="#30363d" stroke-width="0.8"/>
+      <text x="279" y="76" fill="#58a6ff" class="edge-text">ETF WSS</text>
+
+      <!-- 02 Decoder -> 03 Queue (Lane 2) -->
+      <path d="M358 156 H370" fill="none" stroke="#8b949e" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-muted)"/>
+
+      <!-- 03 Queue -> 04 Worker (Lane 2 focal) -->
+      <path d="M470 156 H482" fill="none" stroke="#f08a59" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-accent)"/>
+
+      <!-- 04 Worker -> 05 REST Dispatch (Lane 2 -> Lane 1) -->
+      <path d="M582 156 H636 Q644 156 644 148 V108" fill="none" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-link)"/>
+      <rect x="588" y="141" width="50" height="14" rx="3" fill="#0d1117" stroke="#30363d" stroke-width="0.8"/>
+      <text x="613" y="148" fill="#58a6ff" class="edge-text">FAST ACK</text>
+
+      <!-- 04 Worker -> 07 Hardware (Lane 2 -> Lane 3) -->
+      <path d="M532 188 V204" fill="none" stroke="#8b949e" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#diagram_architecture-arr-muted)"/>
+
+      <!-- 06 Crypto -> 01 Gateway (Lane 3 -> Lane 1 via hop) -->
+      <path d="M370 236 H204 Q196 236 196 228 V108" fill="none" stroke="#6e7681" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#diagram_architecture-arr-muted)"/>
+
+      <!-- Node 01 : Discord Gateway Ingest (Lane 1) -->
+      <rect x="146" y="44" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="150" y="48" width="22" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="161" y="53.5" class="role-text">WSS</text>
+      <text x="196" y="66" class="node-title">Gateway Ingest</text>
+      <text x="196" y="78" class="node-sub">gateway.discord.gg</text>
+      <text x="196" y="90" class="node-tool">mbedTLS · TLS 1.3</text>
+      <rect x="150" y="97" width="18" height="9" rx="2.5" fill="#7c8f6f"/><text x="159" y="101.5" class="chip-text">NET</text>
+      <rect x="224" y="97" width="18" height="9" rx="2.5" fill="#5e7a9b"/><text x="233" y="101.5" class="chip-text">RAW</text>
+
+      <!-- Node 02 : ETF Zero-Copy Decoder (Lane 2) -->
+      <rect x="258" y="124" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="262" y="128" width="22" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="273" y="133.5" class="role-text">ETFS</text>
+      <text x="308" y="146" class="node-title">ETF Decoder</text>
+      <text x="308" y="158" class="node-sub">zero-copy · no-malloc</text>
+      <text x="308" y="170" class="node-tool">dc_etf.c parser</text>
+      <rect x="262" y="177" width="18" height="9" rx="2.5" fill="#5e7a9b"/><text x="271" y="181.5" class="chip-text">RAW</text>
+      <rect x="336" y="177" width="18" height="9" rx="2.5" fill="#b8915a"/><text x="345" y="181.5" class="chip-text">ATM</text>
+
+      <!-- Node 03 : Event Queue dc_intq (Lane 2) -->
+      <rect x="370" y="124" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="374" y="128" width="22" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="385" y="133.5" class="role-text">RING</text>
+      <text x="420" y="146" class="node-title">dc_intq Queue</text>
+      <text x="420" y="158" class="node-sub">ring buffer · 16 frames</text>
+      <text x="420" y="170" class="node-tool">dc_intq.c queue</text>
+      <rect x="374" y="177" width="18" height="9" rx="2.5" fill="#b8915a"/><text x="383" y="181.5" class="chip-text">ATM</text>
+      <rect x="448" y="177" width="18" height="9" rx="2.5" fill="#5e7a9b"/><text x="457" y="181.5" class="chip-text">EVT</text>
+
+      <!-- Node 04 : Worker & Command Router (Lane 2 - FOCAL) -->
+      <rect x="482" y="124" width="100" height="64" rx="6" fill="#161b22" stroke="#f08a59" stroke-width="1.2"/>
+      <rect x="486" y="128" width="22" height="11" rx="3" fill="#f08a59" fill-opacity="0.22"/><text x="497" y="133.5" class="role-text focal-text">EXEC</text>
+      <text x="532" y="146" class="node-title">Worker Router</text>
+      <text x="532" y="158" class="node-sub">commands · /ping /led</text>
+      <text x="532" y="170" class="node-tool">dc_bot.c · FreeRTOS</text>
+      <rect x="486" y="177" width="18" height="9" rx="2.5" fill="#5e7a9b"/><text x="495" y="181.5" class="chip-text">EVT</text>
+      <rect x="560" y="177" width="18" height="9" rx="2.5" fill="#b8915a"/><text x="569" y="181.5" class="chip-text">ACK</text>
+
+      <!-- Node 05 : Discord REST API Dispatch (Lane 1) -->
+      <rect x="594" y="44" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="598" y="48" width="22" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="609" y="53.5" class="role-text">REST</text>
+      <text x="644" y="66" class="node-title">REST Dispatch</text>
+      <text x="644" y="78" class="node-sub">discord.com/api/v10</text>
+      <text x="644" y="90" class="node-tool">dc_rest.c client</text>
+      <rect x="598" y="97" width="18" height="9" rx="2.5" fill="#b8915a"/><text x="607" y="101.5" class="chip-text">ACK</text>
+      <rect x="672" y="97" width="18" height="9" rx="2.5" fill="#9c6b50"/><text x="681" y="101.5" class="chip-text">API</text>
+
+      <!-- Node 06 : Hardware Crypto Acceleration (Lane 3) -->
+      <rect x="370" y="204" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="374" y="208" width="20" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="384" y="213.5" class="role-text">HW</text>
+      <text x="420" y="226" class="node-title">Hardware Crypto</text>
+      <text x="420" y="238" class="node-sub">AES · SHA · RSA</text>
+      <text x="420" y="250" class="node-tool">Xtensa LX6 240MHz</text>
+      <rect x="374" y="257" width="18" height="9" rx="2.5" fill="#7c8f6f"/><text x="383" y="261.5" class="chip-text">SEC</text>
+      <rect x="448" y="257" width="18" height="9" rx="2.5" fill="#5e7a9b"/><text x="457" y="261.5" class="chip-text">KEY</text>
+
+      <!-- Node 07 : NVS Storage & GPIO Peripherals (Lane 3) -->
+      <rect x="482" y="204" width="100" height="64" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1"/>
+      <rect x="486" y="208" width="22" height="11" rx="3" fill="#f0f6fc" fill-opacity="0.08"/><text x="497" y="213.5" class="role-text">PERI</text>
+      <text x="532" y="226" class="node-title">NVS &amp; Peripherals</text>
+      <text x="532" y="238" class="node-sub">nvs tokens · relays/leds</text>
+      <text x="532" y="250" class="node-tool">SPI Flash &amp; GPIO</text>
+      <rect x="486" y="257" width="18" height="9" rx="2.5" fill="#b8915a"/><text x="495" y="261.5" class="chip-text">NVS</text>
+      <rect x="560" y="257" width="18" height="9" rx="2.5" fill="#9c6b50"/><text x="569" y="261.5" class="chip-text">PIN</text>
+
+      <!-- Legend: steps -->
+      <text x="164" y="291" class="legend-label">STEPS</text>
+      <rect x="180" y="284" width="22" height="14" rx="7" fill="#f0f6fc" fill-opacity="0.08"/><text x="191" y="291" class="step-number">01</text><text x="208" y="291" class="legend-text">Capture</text>
+      <rect x="268" y="284" width="22" height="14" rx="7" fill="#f0f6fc" fill-opacity="0.08"/><text x="279" y="291" class="step-number">02</text><text x="296" y="291" class="legend-text">Decode</text>
+      <rect x="354" y="284" width="22" height="14" rx="7" fill="#f0f6fc" fill-opacity="0.08"/><text x="365" y="291" class="step-number">03</text><text x="382" y="291" class="legend-text">Buffer</text>
+      <rect x="440" y="284" width="22" height="14" rx="7" fill="#f08a59" stroke="#f08a59" stroke-width="0.8" fill-opacity="0.20"/><text x="451" y="291" class="step-number focal-text">04</text><text x="468" y="291" class="legend-text">Execute</text>
+      <rect x="534" y="284" width="22" height="14" rx="7" fill="#f0f6fc" fill-opacity="0.08"/><text x="545" y="291" class="step-number">05</text><text x="562" y="291" class="legend-text">Dispatch</text>
+
+      <!-- Legend: data types -->
+      <text x="164" y="313" class="legend-label">DATA</text>
+      <rect x="180" y="307" width="16" height="10" rx="3" fill="#7c8f6f"/><text x="188" y="312" class="chip-text">NET</text><text x="202" y="313" class="legend-text">Network Stream</text>
+      <rect x="290" y="307" width="16" height="10" rx="3" fill="#5e7a9b"/><text x="298" y="312" class="chip-text">RAW</text><text x="312" y="313" class="legend-text">Raw Frame</text>
+      <rect x="382" y="307" width="16" height="10" rx="3" fill="#b8915a"/><text x="390" y="312" class="chip-text">ATM</text><text x="404" y="313" class="legend-text">ETF Atom</text>
+      <rect x="470" y="307" width="16" height="10" rx="3" fill="#9c6b50"/><text x="478" y="312" class="chip-text">API</text><text x="492" y="313" class="legend-text">REST / JSON</text>
+
+      <!-- Legend: flow -->
+      <text x="164" y="335" class="legend-label">FLOW</text>
+      <line x1="180" y1="335" x2="204" y2="335" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-link)"/><text x="212" y="335" class="legend-text">TLS Network Handshake</text>
+      <line x1="340" y1="335" x2="364" y2="335" stroke="#f08a59" stroke-width="1.2" marker-end="url(#diagram_architecture-arr-accent)"/><text x="372" y="335" class="legend-text">Focal Core Pipeline</text>
+      <line x1="490" y1="335" x2="514" y2="335" stroke="#6e7681" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#diagram_architecture-arr-muted)"/><text x="522" y="335" class="legend-text">Hardware Bus / Crypto</text>
+    </svg>
