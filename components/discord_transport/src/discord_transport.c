@@ -179,6 +179,9 @@ static void route_interaction(const DiscordInteraction *it)
                  "interaction id %llu unrouted (cmd '%s' cid '%s')",
                  (unsigned long long)it->id, it->command,
                  it->custom_id);
+        if (it->command[0] != '\0') {
+            (void)discord_interaction_reply(it, "Command not recognized by this firmware.");
+        }
     }
 }
 

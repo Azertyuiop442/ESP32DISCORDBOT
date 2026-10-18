@@ -166,9 +166,9 @@ static void test_xp_roles(void)
 /* ----------------- Sub-domain 4: Orchestrator Tests ----------------- */
 static void test_xp_orchestrator(void)
 {
-    DcXpSystem sys;
-    dc_xp_system_init(&sys, 5000u, 1000u, true);
-    dc_xp_system_bind_role(&sys, 1, 777111ULL);
+    DcXpSystem *sys = dc_xp_system_get();
+    dc_xp_system_init(sys, 5000u, 1000u, true);
+    dc_xp_system_bind_role(sys, 1, 777111ULL);
 
     memset(&s_mock_bot_state, 0, sizeof(s_mock_bot_state));
     s_mock_jobs_count = 0;
@@ -181,7 +181,7 @@ static void test_xp_orchestrator(void)
         .flags = DC_MSG_FLAG_BOT
     };
     DcXpEvent evt;
-    check(!dc_xp_process_message(&sys, &s_mock_bot_state, &bot_msg, 1000u, 42u, &evt),
+    check(!dc_xp_process_message(sys, &s_mock_bot_state, &bot_msg, 1000u, 42u, &evt),
           "bot message ignored by XP engine");
 
     /* Valid user message */
@@ -191,7 +191,7 @@ static void test_xp_orchestrator(void)
         .channel_id = 5678,
         .flags = 0u
     };
-    check(dc_xp_process_message(&sys, &s_mock_bot_state, &user_msg, 1000u, 42u, &evt),
+    check(dc_xp_process_message(sys, &s_mock_bot_state, &user_msg, 1000u, 42u, &evt),
           "valid member message awards XP");
     check(evt.new_xp >= DC_XP_GAIN_MIN && evt.new_xp <= DC_XP_GAIN_MAX, "XP added to user state");
     check(!evt.leveled_up, "not leveled up yet");
@@ -200,7 +200,7 @@ static void test_xp_orchestrator(void)
     DcRankUser *rank = dc_state_rank_user(&s_mock_bot_state, 4242);
     rank->xp = 95u; /* 5 XP away from level 1 */
 
-    check(dc_xp_process_message(&sys, &s_mock_bot_state, &user_msg, 8000u, 42u, &evt),
+    check(dc_xp_process_message(sys, &s_mock_bot_state, &user_msg, 8000u, 42u, &evt),
           "second message crosses level threshold");
     check(evt.leveled_up, "leveled up to level 1");
     check(evt.new_level == 1u, "new level is 1");
@@ -243,14 +243,288 @@ static void test_xp_orchestrator(void)
     dc_xp_feature_get()->on_interaction(&set_it);
     check(strstr(s_last_reply, "set to 2500") != NULL, "setdailyxp confirms new cap");
     check(dc_xp_system_get()->cooldowns.daily_cap == 2500u, "system daily cap reconfigured");
+
+    /* Test on_message with restricted image from level 0 user */
+    s_mock_jobs_count = 0u;
+    DiscordMessage bad_upload = {
+        .message_id = (2000ULL << 22u),
+        .author_id = 8888,
+        .guild_id = 1234,
+        .channel_id = 5678,
+        .flags = DC_MSG_FLAG_IMAGE
+    };
+    dc_xp_feature_get()->on_message(&bad_upload);
+    check(s_mock_jobs_count == 2u, "restricted upload triggers delete and warn DM jobs");
+    check(s_mock_jobs[0].kind == DC_JOB_DELETE_MESSAGE, "first job deletes message");
+    check(s_mock_jobs[1].kind == DC_JOB_SEND_DM, "second job warns author via DM");
+    DcRankUser *spammer_rank = dc_state_rank_user(&s_mock_bot_state, 8888);
+    check(spammer_rank->xp == 0u, "no XP awarded for restricted message");
+
+    /* Test second image upload immediately (flood): delete message but do NOT spam DMs */
+    bad_upload.message_id = (2001ULL << 22u);
+    dc_xp_feature_get()->on_message(&bad_upload);
+    check(s_mock_jobs_count == 3u, "flood upload triggers delete job but NO duplicate DM");
+    check(s_mock_jobs[2].kind == DC_JOB_DELETE_MESSAGE, "third job deletes message");
+
+    /* Interaction /guardlevel command test */
+    DiscordInteraction guard_it = {
+        .command = "guardlevel",
+        .value_count = 1,
+        .values = { "5" }
+    };
+    dc_xp_feature_get()->on_interaction(&guard_it);
+    check(strstr(s_last_reply, "set to 5") != NULL, "guardlevel confirms level 5");
+    check(dc_xp_system_get()->guard.min_level == 5u, "system guard level updated");
+
+    /* Interaction /setlevel command test (admin sets user level) */
+    DiscordInteraction setlvl_it = {
+        .guild_id = 1234,
+        .command = "setlevel",
+        .value_count = 2,
+        .values = { "<@4242>", "5" }
+    };
+    dc_xp_feature_get()->on_interaction(&setlvl_it);
+    check(strstr(s_last_reply, "Set user <@4242> to Level 5") != NULL, "setlevel confirms assignment in English");
+    check(rank->level == 5u, "user level set to 5");
+    check(rank->xp == 1500u, "user XP set to level 5 requirement (1500 XP)");
+
+    /* Test strike escalation to timeout (3 strikes in 60s) */
+    s_mock_jobs_count = 0u;
+    bad_upload.author_id = 7777;
+    bad_upload.message_id = (3000ULL << 22u);
+    dc_xp_feature_get()->on_message(&bad_upload); /* Strike 1: delete + warn DM */
+    check(s_mock_jobs_count == 2u, "strike 1 triggers delete + warn DM");
+
+    bad_upload.message_id = (3005ULL << 22u);
+    dc_xp_feature_get()->on_message(&bad_upload); /* Strike 2: delete */
+    check(s_mock_jobs_count == 3u, "strike 2 triggers delete only");
+
+    bad_upload.message_id = (3010ULL << 22u);
+    dc_xp_feature_get()->on_message(&bad_upload); /* Strike 3: timeout! */
+    check(s_mock_jobs_count == 6u, "strike 3 triggers delete, timeout job, and timeout notification DM");
+    check(s_mock_jobs[3].kind == DC_JOB_DELETE_MESSAGE, "job 4 is delete message");
+    check(s_mock_jobs[4].kind == DC_JOB_TIMEOUT_USER, "job 5 is timeout user");
+    check(s_mock_jobs[4].aux_id == 300u, "timeout duration is 300 seconds (5 min)");
+    check(s_mock_jobs[5].kind == DC_JOB_SEND_DM, "job 6 is timeout DM");
+    check(strstr(s_mock_jobs[5].payload, "timed out for 5 min") != NULL, "DM mentions 5 min timeout");
+
+    /* Interaction /guardinvites command test */
+    DiscordInteraction inv_it = {
+        .command = "guardinvites",
+        .value_count = 1,
+        .values = { "7" }
+    };
+    dc_xp_feature_get()->on_interaction(&inv_it);
+    check(strstr(s_last_reply, "set to 7") != NULL, "guardinvites confirms level 7");
+    check(dc_xp_system_get()->guard.min_invite_level == 7u, "guard invite level updated to 7");
+
+    /* Interaction /leaderboard command test */
+    DiscordInteraction lb_it = {
+        .command = "leaderboard"
+    };
+    dc_xp_feature_get()->on_interaction(&lb_it);
+    check(strstr(s_last_reply, "Top Members Leaderboard:") != NULL, "leaderboard header present");
+    check(strstr(s_last_reply, "4242") != NULL, "leaderboard lists top user 4242");
+    check(strstr(s_last_reply, "Level 5") != NULL, "leaderboard displays user level 5");
+
+    /* Interaction /setlevelrole command test */
+    DiscordInteraction role_it = {
+        .command = "setlevelrole",
+        .value_count = 2,
+        .values = { "3", "<@&888333111>" }
+    };
+    dc_xp_feature_get()->on_interaction(&role_it);
+    check(strstr(s_last_reply, "Bound Role <@&888333111> to Level 3") != NULL, "setlevelrole confirms binding");
+    check(dc_xp_roles_find(&dc_xp_system_get()->roles, 3u) == 888333111ULL, "role bound in roles table");
+
+    /* Interaction /slowmode command test */
+    DiscordInteraction slow_it = {
+        .command = "slowmode",
+        .value_count = 1,
+        .values = { "30" }
+    };
+    dc_xp_feature_get()->on_interaction(&slow_it);
+    check(strstr(s_last_reply, "slowmode set to 30 seconds") != NULL, "slowmode confirms 30 seconds");
+
+    slow_it.values[0][0] = '9';
+    slow_it.values[0][1] = '9';
+    slow_it.values[0][2] = '9';
+    slow_it.values[0][3] = '9';
+    slow_it.values[0][4] = '9';
+    slow_it.values[0][5] = '\0';
+    dc_xp_feature_get()->on_interaction(&slow_it);
+    check(strstr(s_last_reply, "slowmode set to 21600 seconds") != NULL, "slowmode clamped to Discord 21600 max");
+
+    /* Interaction /automod command test */
+    DiscordInteraction am_it = {
+        .command = "automod"
+    };
+    dc_xp_feature_get()->on_interaction(&am_it);
+    check(strstr(s_last_reply, "AutoMod native rules provisioned") != NULL, "automod setup confirms native rule creation");
+
+    /* Ephemeral flag verification */
+    check((dc_xp_feature_get()->flags & DC_FEATURE_EPHEMERAL) != 0u, "XP feature replies are ephemeral");
+
+    /* Comprehensive Registry & Routing Verification */
+    DiscordFeatureRegistry reg;
+    dc_registry_init(&reg);
+    check(dc_xp_register(&reg), "dc_xp_register adds all XP slash commands");
+    check(dc_registry_has(&reg, "rank"), "registry contains /rank");
+    check(dc_registry_has(&reg, "leaderboard"), "registry contains /leaderboard");
+    check(dc_registry_has(&reg, "setlevel"), "registry contains /setlevel");
+    check(dc_registry_has(&reg, "setlevelrole"), "registry contains /setlevelrole");
+    check(dc_registry_has(&reg, "slowmode"), "registry contains /slowmode");
+    check(dc_registry_has(&reg, "automod"), "registry contains /automod");
+
+    /* Route /rank via registry */
+    DiscordInteraction rank_it = {
+        .id = (2500ULL << 22u),
+        .user_id = 4242,
+        .command = "rank"
+    };
+    check(dc_registry_route_interaction(&reg, &rank_it), "/rank routes cleanly via registry");
+    check(strstr(s_last_reply, "Level: 5") != NULL, "/rank reports level 5");
+
+    /* Route /rank with target user option (e.g. /rank @Shepai) */
+    DiscordInteraction rank_target_it = {
+        .id = (2501ULL << 22u),
+        .user_id = 4242,
+        .command = "rank",
+        .value_count = 1,
+        .values = { "<@999888777>" }
+    };
+    check(dc_registry_route_interaction(&reg, &rank_target_it), "/rank with target user routes");
+    check(strstr(s_last_reply, "999888777") != NULL, "/rank displays target member ID");
+
+    /* Route /setlevel with reversed arguments (level: 3, user: @999888777) */
+    DiscordInteraction setlvl_rev = {
+        .guild_id = 1234,
+        .command = "setlevel",
+        .value_count = 2,
+        .values = { "3", "<@999888777>" }
+    };
+    check(dc_registry_route_interaction(&reg, &setlvl_rev), "/setlevel with swapped args routes");
+    check(strstr(s_last_reply, "Set user <@999888777> to Level 3") != NULL, "reversed args parsed properly");
+}
+
+/* ----------------- Sub-domain 4: Media, Invites & Mention Guard Tests ----------------- */
+static void test_xp_guard(void)
+{
+    /* 1. Link & Invite detection */
+    const char *plain = "Hello this is a regular chat message";
+    DiscordSlice s_plain = { .ptr = (const uint8_t *)plain, .len = (uint16_t)strlen(plain) };
+    check(!dc_xp_guard_has_links(s_plain), "plain message has no links");
+    check(!dc_xp_guard_has_invites(s_plain), "plain message has no invites");
+
+    const char *with_https = "Check this project: https://github.com/Azertyuiop442/Plexus";
+    DiscordSlice s_https = { .ptr = (const uint8_t *)with_https, .len = (uint16_t)strlen(with_https) };
+    check(dc_xp_guard_has_links(s_https), "https URL detected");
+    check(!dc_xp_guard_has_invites(s_https), "standard https URL is not an invite");
+
+    const char *with_invite = "Join here discord.gg/abc12345";
+    DiscordSlice s_invite = { .ptr = (const uint8_t *)with_invite, .len = (uint16_t)strlen(with_invite) };
+    check(dc_xp_guard_has_invites(s_invite), "discord.gg invite detected");
+
+    /* 2. Mention Spam Detection */
+    const char *with_mentions = "Hello <@111> <@222> <@333> <@444> join us";
+    DiscordSlice s_mentions = { .ptr = (const uint8_t *)with_mentions, .len = (uint16_t)strlen(with_mentions) };
+    check(dc_xp_guard_count_mentions(s_mentions) > DC_XP_GUARD_MAX_MENTIONS, "mention spam (>3) detected");
+
+    const char *with_everyone = "Important announcement @everyone look!";
+    DiscordSlice s_everyone = { .ptr = (const uint8_t *)with_everyone, .len = (uint16_t)strlen(with_everyone) };
+    check(dc_xp_guard_count_mentions(s_everyone) >= 99u, "@everyone mention detected");
+
+    /* 3. Guard evaluation with separate invite threshold */
+    DcXpGuard guard;
+    dc_xp_guard_init(&guard, 3u, 5u, 30000ULL); /* Requires Level 3 for links/media, Level 5 for invites */
+
+    DiscordMessage msg_text = { .flags = 0u, .content = s_plain };
+    DiscordMessage msg_img  = { .flags = DC_MSG_FLAG_IMAGE, .content = s_plain };
+    DiscordMessage msg_link = { .flags = 0u, .content = s_https };
+    DiscordMessage msg_inv  = { .flags = 0u, .content = s_invite };
+
+    check(!dc_xp_guard_is_restricted(&guard, &msg_text, 0u), "text message allowed at level 0");
+    check(dc_xp_guard_is_restricted(&guard, &msg_img, 0u), "image message restricted at level 0");
+    check(dc_xp_guard_is_restricted(&guard, &msg_link, 2u), "link message restricted at level 2");
+    check(!dc_xp_guard_is_restricted(&guard, &msg_link, 3u), "link message allowed at level 3");
+    check(dc_xp_guard_is_restricted(&guard, &msg_inv, 3u), "invite message restricted at level 3 (< 5)");
+    check(!dc_xp_guard_is_restricted(&guard, &msg_inv, 5u), "invite message allowed at level 5");
+
+    /* 4. Strike recording & Timeout job builders */
+    DiscordId spammer = 9999ULL;
+    check(dc_xp_guard_record_strike(&guard, spammer, 1000u) == 1u, "strike 1 recorded");
+    check(dc_xp_guard_record_strike(&guard, spammer, 5000u) == 2u, "strike 2 recorded within window");
+    check(dc_xp_guard_record_strike(&guard, spammer, 10000u) == 3u, "strike 3 recorded within window");
+
+    DiscordMessage bad_msg = {
+        .guild_id = 111,
+        .channel_id = 222,
+        .author_id = spammer,
+        .message_id = 987654321ULL,
+        .flags = DC_MSG_FLAG_IMAGE
+    };
+    DcJob to_job;
+    check(dc_xp_guard_build_timeout_job(&bad_msg, 300u, &to_job), "timeout job built successfully");
+    check(to_job.kind == DC_JOB_TIMEOUT_USER, "job kind is DC_JOB_TIMEOUT_USER");
+    check(to_job.guild_id == 111, "timeout job guild_id matches");
+    check(to_job.user_id == spammer, "timeout job user_id matches");
+    check(to_job.aux_id == 300u, "timeout duration is 300s");
+
+    DcJob to_dm;
+    check(dc_xp_guard_build_timeout_dm_job(spammer, 5u, &to_dm), "timeout DM job built successfully");
+    check(to_dm.kind == DC_JOB_SEND_DM, "job kind is DC_JOB_SEND_DM");
+    check(strstr(to_dm.payload, "timed out for 5 min") != NULL, "timeout DM payload mentions 5 min");
+}
+
+/* ----------------- Sub-domain 5: Server-Side Delegated Features Tests ----------------- */
+static void test_xp_server(void)
+{
+    /* 1. Slowmode validation & clamping */
+    uint32_t clamped = 0u;
+    check(!dc_xp_server_validate_slowmode(-1, &clamped), "negative slowmode rejected");
+    check(dc_xp_server_validate_slowmode(0, &clamped) && clamped == 0u, "0 slowmode allowed (disabled)");
+    check(dc_xp_server_validate_slowmode(120, &clamped) && clamped == 120u, "120s slowmode preserved");
+    check(dc_xp_server_validate_slowmode(99999, &clamped) && clamped == DC_DISCORD_SLOWMODE_MAX,
+          "excess slowmode clamped to 21600 (6 hours)");
+    check(!dc_xp_server_validate_slowmode(10, NULL), "NULL output pointer safely rejected");
+
+    /* 2. Slowmode JSON payload */
+    char body[48];
+    check(dc_xp_server_build_slowmode_body(60u, body, sizeof(body)), "slowmode payload built");
+    check(strcmp(body, "{\"rate_limit_per_user\":60}") == 0, "slowmode JSON matches Discord format");
+    check(!dc_xp_server_build_slowmode_body(60u, body, 10u), "tiny buffer safely refused");
+
+    /* 3. AutoMod native mention raid rule */
+    char am_buf[384];
+    check(dc_xp_server_build_automod_mention_rule(3u, 300u, am_buf, sizeof(am_buf)),
+          "automod mention rule built");
+    check(strstr(am_buf, "\"mention_total_limit\":3") != NULL, "automod carries mention limit");
+    check(strstr(am_buf, "\"duration_seconds\":300") != NULL, "automod carries 5 min timeout action");
+    check(strstr(am_buf, "\"trigger_type\":5") != NULL, "automod trigger_type is 5 (MENTION_SPAM)");
+    check(!dc_xp_server_build_automod_mention_rule(0u, 300u, am_buf, sizeof(am_buf)),
+          "zero mention limit refused");
+    check(!dc_xp_server_build_automod_mention_rule(3u, 300u, am_buf, 50u),
+          "tiny buffer safely refused for automod rule");
+
+    /* 4. Permission overwrite body (client-side upload lockout) */
+    char perm_buf[80];
+    uint64_t deny_media = DC_DISCORD_PERM_ATTACH_FILES | DC_DISCORD_PERM_EMBED_LINKS; /* 49152 */
+    check(dc_xp_server_build_guard_overwrite_body(deny_media, 0ULL, perm_buf, sizeof(perm_buf)),
+          "guard overwrite body built");
+    check(strstr(perm_buf, "\"deny\":\"49152\"") != NULL, "deny bitmask is 49152 (0xC000)");
+    check(strstr(perm_buf, "\"type\":0") != NULL, "type 0 targets role overwrite");
+    check(!dc_xp_server_build_guard_overwrite_body(deny_media, 0ULL, perm_buf, 20u),
+          "tiny buffer safely refused for permission overwrite");
 }
 
 int main(void)
 {
-    printf("== XP, Anti-Farm Daily Cap & Role Rewards Tests ==\n");
+    printf("== XP, Anti-Farm, Server Delegation, Guard & Role Rewards Tests ==\n");
     test_xp_curve();
     test_xp_cooldown_and_daily_cap();
     test_xp_roles();
+    test_xp_guard();
+    test_xp_server();
     test_xp_orchestrator();
 
     if (failures == 0) {

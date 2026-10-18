@@ -17,6 +17,7 @@
 
 #include "discord_provision.h"
 #include "discord_transport.h"
+#include "discord_xp.h"
 
 #define APP_TAG "bot"
 
@@ -177,7 +178,7 @@ static esp_err_t sntp_wait(void)
 
 static void ping_on_interaction(const DiscordInteraction *it)
 {
-    (void)it;
+    (void)discord_interaction_reply(it, "Pong! :ping_pong: ESP32 Discord Bot is online.");
 }
 
 static const DiscordFeature ping_feature = {
@@ -185,7 +186,8 @@ static const DiscordFeature ping_feature = {
     .required_intents = 0u,
     .init_priority = 0u,
     .on_message = NULL,
-    .on_interaction = ping_on_interaction
+    .on_interaction = ping_on_interaction,
+    .flags = DC_FEATURE_EPHEMERAL
 };
 
 void app_main(void)
@@ -244,6 +246,14 @@ void app_main(void)
         return;
     }
     ESP_LOGI(APP_TAG, "ping feature registered (/ping)");
+
+    dc_xp_system_init(dc_xp_system_get(), 5000u, 1000u, true);
+    if (!dc_xp_register(discord_registry())) {
+        ESP_LOGE(APP_TAG, "xp features register failed");
+        return;
+    }
+    ESP_LOGI(APP_TAG, "xp features registered (12 slash commands)");
+
     err = discord_start();
     if (err != ESP_OK) {
         ESP_LOGE(APP_TAG, "discord start failed 0x%x",

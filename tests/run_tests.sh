@@ -56,9 +56,12 @@ $CC "${CFLAGS[@]}" "${SAN_FLAGS[@]}" \
     -I"$ROOT/components/discord_scheduler/include" \
     -I"$ROOT/features/xp" \
     "$ROOT/components/discord_memory/src/discord_state.c" \
+    "$ROOT/components/discord_core/src/discord_feature.c" \
     "$ROOT/features/xp/discord_xp_curve.c" \
     "$ROOT/features/xp/discord_xp_cooldown.c" \
     "$ROOT/features/xp/discord_xp_roles.c" \
+    "$ROOT/features/xp/discord_xp_guard.c" \
+    "$ROOT/features/xp/discord_xp_server.c" \
     "$ROOT/features/xp/discord_xp.c" \
     "$ROOT/tests/features/test_xp.c" \
     -o "$OUT/test_xp"

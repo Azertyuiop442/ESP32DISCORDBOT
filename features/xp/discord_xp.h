@@ -10,6 +10,8 @@
 #include "discord_xp_curve.h"
 #include "discord_xp_cooldown.h"
 #include "discord_xp_roles.h"
+#include "discord_xp_guard.h"
+#include "discord_xp_server.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +20,7 @@ extern "C" {
 typedef struct {
     DcXpCooldownTable cooldowns;
     DcXpRolesTable    roles;
+    DcXpGuard         guard;
     bool              announce_levelup;
 } DcXpSystem;
 
@@ -57,6 +60,28 @@ void dc_xp_system_set_debounce(DcXpSystem *sys, uint64_t debounce_ms);
 bool dc_xp_system_bind_role(DcXpSystem *sys, uint8_t level, uint64_t role_id);
 
 /**
+ * Reconfigures the minimum level required to post media or links.
+ */
+void dc_xp_system_set_guard_min_level(DcXpSystem *sys, uint8_t min_level);
+
+/**
+ * Reconfigures the minimum level required to post discord server invites.
+ */
+void dc_xp_system_set_guard_invite_level(DcXpSystem *sys, uint8_t min_invite_lvl);
+
+/**
+ * Collects up to max_count top users sorted by XP in descending order.
+ */
+uint8_t dc_xp_top_ranks(const DcBotState *state, const DcRankUser *out_top[], uint8_t max_count);
+
+/**
+ * Admin action: sets user's level directly, adjusts base XP, and collects role rewards if any.
+ */
+bool dc_xp_system_admin_set_level(DcXpSystem *sys, DcBotState *state,
+                                  DiscordId guild_id, DiscordId user_id,
+                                  uint8_t level, DcXpEvent *out_event);
+
+/**
  * Core processing: inspects an incoming DiscordMessage, verifies sender & cooldown/daily cap,
  * increments user XP in bot state, evaluates level-up, and populates out_event.
  * Returns true if XP was awarded, false otherwise (e.g. bot sender, daily cap reached).
@@ -81,6 +106,7 @@ bool dc_xp_build_announce_job(const DcXpEvent *event, DcJob *out_job);
  */
 DcXpSystem *dc_xp_system_get(void);
 const DiscordFeature *dc_xp_feature_get(void);
+bool dc_xp_register(DiscordFeatureRegistry *r);
 
 #ifdef __cplusplus
 }

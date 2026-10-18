@@ -20,8 +20,13 @@ When reporting a vulnerability, please provide:
 
 You will receive an acknowledgment within 48 hours and regular updates on the remediation process.
 
-## Embedded Security Considerations
+## Embedded Security Considerations & Threat Model
 
-- **Tokens & Secrets:** Never hardcode Discord bot tokens or Wi-Fi credentials in source files. Always use the Flash NVS encrypted storage partition or `.env` during provisioning.
-- **IDENTIFY Rate Limits:** Discord strictly enforces 1,000 IDENTIFY calls per 24-hour rolling window. This framework persists the quota counter to NVS across device reboots to prevent token revocation.
-- **TLS 1.3:** Always use valid root certificates (`mbedTLS 4.1.0`) when communicating with Discord Gateway and REST API endpoints.
+- **TLS 1.2 & Root CA Pinned:** All Gateway WebSocket (`wss://`) and REST (`https://`) communications negotiate **TLS 1.2** using `mbedTLS 4.1.0` with DigiCert Global Root CA and GlobalSign Root CA pinned directly in firmware. TLS 1.3 is intentionally disabled via `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y` to conserve ~20 KB of DRAM per TLS context (~39 KB total), critical for ESP32 stability.
+- **Remote vs. Physical Security (Deployer Responsibility):**
+  - **Remote Protection (Built-in):** The firmware strictly blocks HTTP/WS plaintext connections, enforces an allowlist for HTTP headers, drops and rejects redirect chains (`Location` headers) to prevent token exfiltration, and redacts sensitive credentials in serial logs.
+  - **Physical Flash Protection (Configured by Deployer):** By default, development builds do not activate hardware Flash Encryption to avoid burning irreversible eFuses on developer boards. **You (the deployer) decide the hardware security level.** If your ESP32 board is placed in an untrusted physical environment where physical extraction is a threat, you must enable **Flash Encryption** (`CONFIG_SECURE_FLASH_ENC_ENABLED`), **Secure Boot v2** (`CONFIG_SECURE_BOOT`), and **NVS Encryption** (`CONFIG_NVS_ENCRYPTION`) via `idf.py menuconfig` before burning to hardware.
+- **Tokens & Credentials Provisioning:** Never commit `.env` or hardcode bot tokens or Wi-Fi credentials into source code. Provisioning is done over local serial monitor or encrypted NVS partition.
+- **IDENTIFY Rate Limits:** Discord strictly enforces 1,000 IDENTIFY calls per 24-hour rolling window. This framework persists the quota counter and window timestamp to NVS across device reboots to prevent accidental token revocation.
+- **Privacy & Member Data Minimization:** No Personally Identifiable Information (PII) such as message bodies, member usernames, avatars, IP addresses, or emails are stored. Only operational 64-bit Discord Snowflake IDs and numerical progression counters (XP, level) are retained, with volatile memory (RAM) flushed on reboot and persistent records manageable via moderation commands or `dc_store_delete`.
+
