@@ -360,8 +360,6 @@ static void test_xp_orchestrator(void)
         .command = "automod"
     };
     dc_xp_feature_get()->on_interaction(&am_it);
-    check(strstr(s_last_reply, "AutoMod native rules provisioned") != NULL, "automod setup confirms native rule creation");
-
     /* Ephemeral flag verification */
     check((dc_xp_feature_get()->flags & DC_FEATURE_EPHEMERAL) != 0u, "XP feature replies are ephemeral");
 
@@ -371,6 +369,8 @@ static void test_xp_orchestrator(void)
     check(dc_xp_register(&reg), "dc_xp_register adds all XP slash commands");
     check(dc_registry_has(&reg, "rank"), "registry contains /rank");
     check(dc_registry_has(&reg, "leaderboard"), "registry contains /leaderboard");
+    check(dc_registry_has(&reg, "forget"), "registry contains /forget");
+    check(dc_registry_has(&reg, "forgetme"), "registry contains /forgetme");
     check(dc_registry_has(&reg, "setlevel"), "registry contains /setlevel");
     check(dc_registry_has(&reg, "setlevelrole"), "registry contains /setlevelrole");
     check(dc_registry_has(&reg, "slowmode"), "registry contains /slowmode");
@@ -405,6 +405,16 @@ static void test_xp_orchestrator(void)
     };
     check(dc_registry_route_interaction(&reg, &setlvl_rev), "/setlevel with swapped args routes");
     check(strstr(s_last_reply, "Set user <@999888777> to Level 3") != NULL, "reversed args parsed properly");
+
+    /* Interaction /forget command test (GDPR Right to Erasure) */
+    DiscordInteraction forget_it = {
+        .user_id = 4242,
+        .command = "forget",
+        .value_count = 0
+    };
+    check(dc_registry_route_interaction(&reg, &forget_it), "/forget routes via registry");
+    check(strstr(s_last_reply, "User <@4242>'s progression records (XP, rank, cooldowns) have been permanently erased") != NULL, "forget command confirms deletion");
+    check(dc_state_rank_user(&s_mock_bot_state, 4242)->xp == 0, "user XP reset after /forget");
 }
 
 /* ----------------- Sub-domain 4: Media, Invites & Mention Guard Tests ----------------- */

@@ -104,6 +104,12 @@ bool dc_state_verify_captcha(DcBotState *s, DiscordId user_id, const char *reply
 DcSpamUser *dc_state_spam_user(DcBotState *s, DiscordId user_id);
 DcRankUser *dc_state_rank_user(DcBotState *s, DiscordId user_id);
 
+/**
+ * Erase all in-memory pseudonymous progression, spam strikes, and active tracking
+ * for a user (Right to Erasure / GDPR compliance).
+ */
+bool dc_state_forget_user(DcBotState *s, DiscordId user_id);
+
 #ifdef __cplusplus
 }
 #endif

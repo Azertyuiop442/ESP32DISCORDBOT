@@ -173,3 +173,25 @@ DcRankUser *dc_state_rank_user(DcBotState *s, DiscordId user_id)
     u->tracked = true;
     return u;
 }
+
+bool dc_state_forget_user(DcBotState *s, DiscordId user_id)
+{
+    if (s == NULL || user_id == 0u) {
+        return false;
+    }
+    bool found = false;
+    for (uint32_t i = 0; i < DC_RANK_USERS; i++) {
+        if (s->ranks[i].tracked && s->ranks[i].user_id == user_id) {
+            memset(&s->ranks[i], 0, sizeof(DcRankUser));
+            found = true;
+        }
+    }
+    for (uint32_t i = 0; i < DC_SPAM_USERS; i++) {
+        if (s->spam[i].tracked && s->spam[i].user_id == user_id) {
+            memset(&s->spam[i], 0, sizeof(DcSpamUser));
+            found = true;
+        }
+    }
+    return found;
+}
+

@@ -66,6 +66,12 @@ uint32_t dc_xp_cooldown_get_daily_xp(const DcXpCooldownTable *tbl, DiscordId use
  */
 uint64_t dc_xp_cooldown_remaining_ms(const DcXpCooldownTable *tbl, DiscordId user_id, uint64_t now_ms);
 
+/**
+ * Resets/erases cooldown and daily XP history for a user (e.g. /forget).
+ */
+void dc_xp_cooldown_reset(DcXpCooldownTable *tbl, DiscordId user_id);
+
+
 #ifdef __cplusplus
 }
 #endif

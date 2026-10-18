@@ -96,21 +96,29 @@ Embedded security on the ESP32 operates across two independent boundaries: **rem
 
 ### 1. Built-in Remote Defense (Firmware Level)
 
-* **TLS 1.2 via mbedTLS 4.1.0:** All Gateway WebSocket (`wss://gateway.discord.gg`) and REST (`https://discord.com`) connections enforce TLS 1.2 with pinned root CAs (**DigiCert Global Root CA** and **GlobalSign Root CA**). Insecure plaintext HTTP/WS endpoints are rejected at compile-time and runtime.
+* **TLS 1.2 via mbedTLS 4.1.0 with Pinned Roots:** All Gateway WebSocket (`wss://gateway.discord.gg`) and REST (`https://discord.com`) connections enforce TLS 1.2 against four pinned root authorities in firmware (`discord_root_ca.h`):
+  1. **GlobalSign Root CA** (expires 2028 — cross-signs Google Trust Services intermediates)
+  2. **DigiCert Global Root CA** (expires 2031 — legacy & alternative edge termination)
+  3. **GTS Root R1** (expires 2036 — RSA 4096-bit Google Trust Services root)
+  4. **GTS Root R4** (expires 2036 — ECDSA P-384 Google Trust Services root)
+  Insecure plaintext HTTP/WS endpoints are rejected at compile-time and runtime. If Discord or Cloudflare migrates to new root authorities, new PEM blocks can be appended to `discord_root_ca.h`, or deployers can toggle ESP-IDF's full certificate bundle (`CONFIG_MBEDTLS_CERTIFICATE_BUNDLE`).
 * **Dynamic TLS Buffers:** Configured with `CONFIG_MBEDTLS_DYNAMIC_BUFFER=y`, saving ~20 KB DRAM per TLS context (~39 KB total across dual sockets). Dynamic buffers are mutually exclusive with TLS 1.3 in ESP-IDF, so TLS 1.2 is negotiated deterministically.
 * **Anti-Redirect Token Protection:** The REST client strictly enforces `disable_auto_redirect = true`. Malicious HTTP 301/302 redirects are refused outright, preventing attacker servers from harvesting the bot's `Authorization` header.
 * **Log Redaction:** Serial diagnostic output redacts bot tokens, only retaining non-sensitive truncated fingerprints for runtime diagnostics.
 * **Zero-Malloc Memory Safety:** Stack-bound parsing and bounded FIFO rings protect against heap corruption, double-frees, and remote code execution vulnerabilities.
 
-### 2. Physical & Hardware Security: You Decide the Configuration
+### 2. Physical & Hardware Security: Deployer Responsibility Model
 
 > [!IMPORTANT]
-> **You (the deployer) decide and configure the physical security level.**
-> By default, development builds leave Flash Encryption and Secure Boot disabled in `sdkconfig.defaults`. This allows developers to flash binaries, debug over JTAG, and read serial logs without permanently burning irreversible hardware eFuses.
+> **Physical hardware security is governed by deployer configuration.**
+> By default, development builds leave Flash Encryption and Secure Boot disabled in `sdkconfig.defaults` to prevent burning irreversible hardware eFuses on prototyping boards. For production units deployed in physically accessible environments, deployers configure hardware-level cryptographic protection.
 
-* **Remote vs. Physical Threat Model:** The firmware protects credentials and tokens against remote exfiltration over the network. However, on any standard ESP32 development board, someone with physical access to the board can dump the external SPI Flash chip over USB/UART (`esptool.py read_flash`) unless hardware encryption is turned on.
-* **Enabling Production Flash & NVS Encryption:** For production deployments where physical board theft or probing is a threat, you must enable hardware-grade cryptographic protections via `idf.py menuconfig` before flashing:
-  1. **Flash Encryption:** `Security features -> Enable hardware flash encryption on boot` (`CONFIG_SECURE_FLASH_ENC_ENABLED=y`)
+* **Remote vs. Physical Threat Model:** The firmware protects credentials and tokens against remote exfiltration over the network. However, on any standard ESP32 development board, someone with physical access to the board can dump the external SPI Flash chip over USB/UART (`esptool.py read_flash`) unless hardware encryption is enabled.
+* **Understanding Flash Encryption Modes (Development vs. Release):**
+  * **Development Mode (`CONFIG_SECURE_FLASH_ENCRYPTION_MODE_DEVELOPMENT`):** The bootloader encrypts plaintext flash partitions on first boot using an internal hardware key. It permits re-flashing plaintext images via UART bootloader up to a limit (typically 3 to 4 times, tracking the 7-bit `FLASH_CRYPT_CNT` eFuse). Once the eFuse bits are exhausted, no more UART plaintext flashing is allowed.
+  * **Release Mode (`CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE`):** For final production deployments. It burns `FLASH_CRYPT_CNT` to `0x7F` permanently, disables UART plaintext flashing permanently, and protects JTAG pins. Updates must subsequently be delivered over signed OTA.
+* **How to Enable via `idf.py menuconfig`:**
+  1. **Flash Encryption:** `Security features -> Enable hardware flash encryption on boot`
   2. **Secure Boot v2:** `Security features -> Enable hardware Secure Boot in bootloader` (`CONFIG_SECURE_BOOT=y`)
   3. **Encrypted NVS:** Encrypt the NVS partition to protect bot tokens and Wi-Fi credentials at rest (`CONFIG_NVS_ENCRYPTION=y`).
 
@@ -118,19 +126,19 @@ Embedded security on the ESP32 operates across two independent boundaries: **rem
 
 ## Privacy Policy & Member Data Governance
 
-This framework adheres to strict **data minimization** principles:
+Stores two things per member: the Discord user ID and a numeric rank/XP. A Discord ID is a pseudonymous identifier, so it counts as personal data under GDPR. Nothing else is kept: no message text, names, emails or IP addresses.
 
-| Data Category | Storage Tier | Lifetime / Retention | Content Description | PII? |
+| Data Category | Storage Tier | Lifetime / Retention | Content Description | GDPR Classification |
 |---|---|---|---|---|
-| **XP & Level Progression** | Flash (`DcStore`) | Persistent (A/B Flash) | 64-bit Discord Snowflake ID + XP uint32 + Level uint8 | **No** (numeric only) |
-| **Open Tickets** | RAM (`DcBotState`) | Volatile (16 slots LRU) | Snowflake IDs (ticket ID, channel ID, user ID, message ID) | **No** (no message bodies) |
-| **CAPTCHA Challenges** | RAM (`DcBotState`) | 5 minutes (8 slots max) | 6-character random alphanumeric verification string | **No** |
-| **Anti-Spam State** | RAM (`DcBotState`) | Rolling 8-event window | 32-bit FNV message hashes (raw message text is never saved) | **No** |
+| **XP & Level Progression** | Flash (`DcStore`) / RAM | Persistent or active session | 64-bit Discord Snowflake ID + XP uint32 + Level uint8 | **Pseudonymous Personal Data** |
+| **Open Tickets** | RAM (`DcBotState`) | Volatile (16 slots LRU) | Snowflake IDs (ticket ID, channel ID, user ID, message ID) | Operational IDs only |
+| **CAPTCHA Challenges** | RAM (`DcBotState`) | 5 minutes (8 slots max) | 6-character random alphanumeric verification string | Ephemeral challenge |
+| **Anti-Spam State** | RAM (`DcBotState`) | Rolling 8-event window | 32-bit FNV message hashes (raw message text is never saved) | Ephemeral hash |
 | **Bot Token & Wi-Fi** | Flash (NVS) | Persistent | Bot token, Wi-Fi SSID & password | Device config only |
 
-* **Zero Personal Information (PII):** The bot does **not** store message contents, user profile avatars, usernames, email addresses, or IP addresses.
+* **Data Minimization:** The bot does **not** store message contents, user profile avatars, member usernames, email addresses, or IP addresses.
 * **Volatile Working Memory:** All tickets, CAPTCHA sessions, and spam anti-flood hashes exist exclusively in volatile RAM and are completely erased on device reboot.
-* **Right to Erasure & Deletion:** User progression records in Flash can be deleted programmatically via the C API (`dc_store_delete(store, user_id)`) or by invoking moderation slash commands. The entire board can be wiped with `idf.py erase-flash`.
+* **Right to Erasure (`/forget`):** Server administrators and configured developers can execute the slash command `/forget <@user|user_id>` (or self `/forget`) to permanently erase pseudonymous XP, rank, and cooldown records from device memory upon user request. Flash memory can also be completely wiped via `dc_store_delete` or `idf.py erase-flash`.
 
 ---
 

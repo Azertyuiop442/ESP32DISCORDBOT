@@ -82,6 +82,12 @@ bool dc_xp_system_admin_set_level(DcXpSystem *sys, DcBotState *state,
                                   uint8_t level, DcXpEvent *out_event);
 
 /**
+ * Erases pseudonymous progression and cooldown tracking for a user (GDPR Right to Erasure /forget).
+ */
+bool dc_xp_system_forget_user(DcXpSystem *sys, DcBotState *state, DiscordId user_id);
+
+
+/**
  * Core processing: inspects an incoming DiscordMessage, verifies sender & cooldown/daily cap,
  * increments user XP in bot state, evaluates level-up, and populates out_event.
  * Returns true if XP was awarded, false otherwise (e.g. bot sender, daily cap reached).

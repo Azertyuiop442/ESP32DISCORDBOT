@@ -140,3 +140,17 @@ uint64_t dc_xp_cooldown_remaining_ms(const DcXpCooldownTable *tbl, DiscordId use
     }
     return 0u;
 }
+
+void dc_xp_cooldown_reset(DcXpCooldownTable *tbl, DiscordId user_id)
+{
+    if (tbl == NULL || user_id == 0u) {
+        return;
+    }
+    for (uint32_t i = 0u; i < DC_XP_COOLDOWN_SLOTS; i++) {
+        if (tbl->slots[i].occupied && tbl->slots[i].user_id == user_id) {
+            memset(&tbl->slots[i], 0, sizeof(DcXpCooldownSlot));
+            break;
+        }
+    }
+}
+

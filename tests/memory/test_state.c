@@ -196,6 +196,22 @@ static void test_rank_slots(void)
     check(dc_state_spam_user(&s, 501)->strikes == 5, "spam table unaffected by rank table");
 }
 
+static void test_forget_user(void)
+{
+    DcBotState s;
+    memset(&s, 0, sizeof(s));
+
+    DcRankUser *r = dc_state_rank_user(&s, 777);
+    r->xp = 500;
+    r->level = 3;
+    DcSpamUser *sp = dc_state_spam_user(&s, 777);
+    sp->strikes = 2;
+
+    check(dc_state_forget_user(&s, 777), "user forgotten successfully");
+    check(dc_state_rank_user(&s, 777)->xp == 0, "xp reset after forget");
+    check(!dc_state_forget_user(&s, 999), "non-existent user returns false");
+}
+
 int main(void)
 {
     test_footprint();
@@ -208,7 +224,9 @@ int main(void)
     test_captcha_expiry();
     test_spam_slots();
     test_rank_slots();
+    test_forget_user();
 
     printf("\n%s (%d failure(s))\n", failures ? "FAILED" : "PASSED", failures);
     return failures ? 1 : 0;
 }
+

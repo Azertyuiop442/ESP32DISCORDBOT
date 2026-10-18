@@ -185,6 +185,18 @@ bool dc_xp_process_message(DcXpSystem *sys, DcBotState *state,
     return true;
 }
 
+bool dc_xp_system_forget_user(DcXpSystem *sys, DcBotState *state, DiscordId user_id)
+{
+    if (state == NULL || user_id == 0u) {
+        return false;
+    }
+    bool erased = dc_state_forget_user(state, user_id);
+    if (sys != NULL) {
+        dc_xp_cooldown_reset(&sys->cooldowns, user_id);
+    }
+    return erased;
+}
+
 bool dc_xp_build_role_job(const DcXpEvent *event, uint8_t role_index, DcJob *out_job)
 {
     if (event == NULL || out_job == NULL || role_index >= event->roles_count) {
@@ -542,6 +554,28 @@ static void dc_xp_on_interaction(const DiscordInteraction *it)
         return;
     }
 
+    /* 10. Slash command /forget or /forgetme (Right to Erasure / GDPR) */
+    if (is_cmd(it, "forget") || is_cmd(it, "forgetme")) {
+        DiscordId target_user = it->user_id;
+        if (it->value_count > 0 && it->values[0][0] != '\0') {
+            const char *p = it->values[0];
+            while (*p && (*p < '0' || *p > '9')) {
+                p++;
+            }
+            if (*p >= '0' && *p <= '9') {
+                target_user = (DiscordId)strtoull(p, NULL, 10);
+            }
+        }
+        DcXpSystem *sys = dc_xp_system_get();
+        (void)dc_xp_system_forget_user(sys, state, target_user);
+        char reply[180];
+        (void)snprintf(reply, sizeof(reply),
+                       "User <@%llu>'s progression records (XP, rank, cooldowns) have been permanently erased from device memory.",
+                       (unsigned long long)target_user);
+        (void)discord_interaction_reply(it, reply);
+        return;
+    }
+
     (void)discord_interaction_reply(it, "Unknown command.");
 }
 
@@ -549,6 +583,8 @@ static const DiscordFeature s_xp_commands[] = {
     { .name = "rank",          .required_intents = DC_INTENT_GUILD_MESSAGES, .init_priority = 10u, .on_message = dc_xp_on_message, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
     { .name = "leaderboard",   .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
     { .name = "top",           .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
+    { .name = "forget",        .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
+    { .name = "forgetme",      .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
     { .name = "setdailyxp",    .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
     { .name = "guardlevel",    .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
     { .name = "setguardlevel", .required_intents = 0u, .init_priority = 10u, .on_message = NULL, .on_interaction = dc_xp_on_interaction, .flags = DC_FEATURE_EPHEMERAL },
